@@ -96,8 +96,12 @@ def df_to_anndata(
     uns = OrderedDict()
     # store all numerical/non-numerical columns that are not obs only
     binary_columns = _detect_binary_columns(df, numerical_columns)
-    uns["numerical_columns"] = list(set(numerical_columns) | set(binary_columns))
-    uns["non_numerical_columns"] = list(set(dataframes.df.columns) ^ set(uns["numerical_columns"]))
+    uns["numerical_columns"] = list(set(numerical_columns) | set(binary_columns))  # TODO delete
+    uns["non_numerical_columns"] = list(set(dataframes.df.columns) ^ set(uns["numerical_columns"]))  # TODO delete
+
+    var = pd.DataFrame(index=list(dataframes.df.columns))
+    var["ehrapy_column_type"] = "non_numerical"
+    var.loc[list(set(numerical_columns) | set(binary_columns)), "ehrapy_column_type"] = "numerical"
 
     all_num = True if len(numerical_columns) == len(list(dataframes.df.columns)) else False
     X = X.astype(np.number) if all_num else X.astype(object)
@@ -105,9 +109,9 @@ def df_to_anndata(
     adata = AnnData(
         X=X,
         obs=_cast_obs_columns(dataframes.obs),
-        var=pd.DataFrame(index=list(dataframes.df.columns)),
+        var=var,
         layers={"original": X.copy()},
-        uns=uns,
+        uns=uns,  # TODO delete
     )
 
     logg.info(
@@ -206,8 +210,16 @@ def move_to_obs(adata: AnnData, to_obs: list[str] | str, copy_obs: bool = False)
         cols_to_obs_indices = adata.var_names.isin(to_obs)
         cols_to_obs = adata[:, cols_to_obs_indices].to_df()
         adata.obs = adata.obs.join(cols_to_obs)
-        num_set = set(adata.uns["numerical_columns"].copy())
-        non_num_set = set(adata.uns["non_numerical_columns"].copy())
+        if "numerical_columns" in adata.uns_keys():
+            print("detected adata.uns['numerical_columns'] in adata.uns_keys(). deprc")
+            # num_set = set(adata.uns["numerical_columns"].copy())  # TODO: delete
+        if "numerical_columns" in adata.uns_keys():
+            print("detected adata.uns['numerical_columns'] in adata.uns_keys(). deprc")
+            # non_num_set = set(adata.uns["non_numerical_columns"].copy())  # TODO: delete
+
+        num_set = adata.var_names[adata.var["ehrapy_column_type"] == "numeric"].tolist()
+        non_num_set = adata.var_names[adata.var["ehrapy_column_type"] == "non_numeric"].tolist()
+
         var_num = []
         var_non_num = []
         for var in to_obs:
@@ -307,9 +319,11 @@ def move_to_x(adata: AnnData, to_x: list[str] | str) -> AnnData:
         new_adata.obs = adata.obs[adata.obs.columns[~adata.obs.columns.isin(cols_not_in_x)]]
         # update uns (copy maybe: could be a costly operation but reduces reference cycles)
         # users might save those as separate AnnData object and this could be unexpected behaviour if we dont copy
-        num_columns_moved, non_num_columns_moved, _ = _update_uns(adata, cols_not_in_x, True)
-        new_adata.uns["numerical_columns"] = adata.uns["numerical_columns"] + num_columns_moved
-        new_adata.uns["non_numerical_columns"] = adata.uns["non_numerical_columns"] + non_num_columns_moved
+        num_columns_moved, non_num_columns_moved, _ = _update_uns(adata, cols_not_in_x, True)  # TODO: delete
+        new_adata.uns["numerical_columns"] = adata.uns["numerical_columns"] + num_columns_moved  # TODO: delete
+        new_adata.uns["non_numerical_columns"] = (
+            adata.uns["non_numerical_columns"] + non_num_columns_moved
+        )  # TODO: delete
         logg.info(f"Added `{cols_not_in_x}` features to `X`.")
     else:
         new_adata = adata
